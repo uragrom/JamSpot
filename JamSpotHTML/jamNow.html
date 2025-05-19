@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Текущие джемы – JamSpot</title>
+  <style>
+    body { margin:0; font-family:Arial,sans-serif; background:#f5f5f5; }
+    header { background:#cc6600; color:#fff; padding:1rem; text-align:center; }
+    main { padding:1rem; max-width:900px; margin:0 auto; }
+    .jam-list { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:1rem; }
+    .jam-card { background:#fff; border-radius:6px; box-shadow:0 2px 6px rgba(0,0,0,0.1); padding:1rem; }
+    .jam-card h4 { margin:0 0 .5rem; color:#b34700; }
+    .fab { position:fixed; bottom:24px; right:24px; width:56px; height:56px; background:#ff9933; color:#b34700; border-radius:50%; font-size:32px; line-height:56px; text-align:center; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.2); }
+    .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); align-items:center; justify-content:center; }
+    .modal.show { display:flex; }
+    .modal-content { background:#fff; border-radius:6px; padding:1.5rem; width:90%; max-width:400px; position:relative; }
+    .modal-content h3 { margin-top:0; }
+    .modal-content label { display:block; margin-top:1rem; font-weight:bold; }
+    .modal-content input, .modal-content textarea { width:100%; padding:.5rem; margin-top:.3rem; border:1px solid #ccc; border-radius:4px; }
+    .modal-actions { margin-top:1rem; text-align:right; }
+    .modal-actions button { padding:.6rem 1.2rem; border:none; background:#cc6600; color:#fff; border-radius:4px; cursor:pointer; }
+    .close-btn { position:absolute; top:8px; right:12px; font-size:24px; color:#333; cursor:pointer; }
+    .message { text-align:center; margin-top:1rem; font-weight:bold; }
+          /* navbarчик! */
+          :root {
+        --brand-dark: #b34700;
+        --brand-medium: #cc6600;
+        --brand-light: #ff9933;
+        --text-light: #ffffff;
+      }
+
+      .navbar, footer {
+        background-color: var(--brand-dark) !important;
+      }
+      .navbar-brand, .navbar-nav .nav-link, footer p, footer a {
+        color: var(--text-light) !important;
+      }
+      .navbar-nav .nav-link.active {
+        font-weight: bold;
+      }
+  </style>
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+<body>
+
+          <!-- Navbar -->
+          <nav class="navbar navbar-expand-lg">
+            <div class="container">
+              <a class="navbar-brand" href="#">
+                <img src="/JamSpot.png" alt="JamSpot logo" width="40" height="40" class="d-inline-block align-text-top">
+                JamSpot
+              </a>
+              <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Переключить навигацию">
+                <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
+              </button>
+              <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                  <li class="nav-item"><a class="nav-link" href="/index.html">Главная</a></li>
+                  <li class="nav-item"><a class="nav-link active" href="/jamNow.html">Текущие JAMы</a></li>
+                  <li class="nav-item"><a class="nav-link" href="/Projects.html">Регистрация</a></li>
+                  <li class="nav-item"><a class="nav-link" href="/comands.html">Команда</a></li>
+                </ul>
+              </div>
+            </div>
+          </nav>
+      
+
+  <header>
+
+    <h1>Текущие джемы</h1>
+    <p>Актуальные игровые джемы и их условия</p>
+  </header>
+  <main>
+    <div class="jam-list" id="jamList">
+      <!-- здесь будут карточки -->
+    </div>
+  </main>
+
+
+
+  <div class="modal" id="jamModal">
+    <div class="modal-content">
+      <span class="close-btn" id="closeFormBtn">×</span>
+      <h3>Новая заявка на джем</h3>
+      <div class="message" id="formMessage" style="display:none;"></div>
+      <label for="jamTitle">Название*</label>
+      <input id="jamTitle" placeholder="Введите название">
+      <label for="jamConditions">Условия*</label>
+      <textarea id="jamConditions" rows="3" placeholder="Опишите условия"></textarea>
+      <label for="jamReward">Приз</label>
+      <input id="jamReward" placeholder="Что получают победители">
+      <label for="jamParticipants">Макс. участников</label>
+      <input id="jamParticipants" type="number" placeholder="Число">
+      <label for="jamContact">Контакт*</label>
+      <input id="jamContact" placeholder="Telegram, email">
+      <div class="modal-actions">
+        <button id="submitJamBtn">Отправить заявку</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Assuming API runs on same host and port
+const API_URL = '';// Use relative path
+
+    async function loadJams() {
+      try {
+        const res = await fetch(`${API_URL}/jams.json`);
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const jams = await res.json();
+        const container = document.getElementById('jamList');
+        container.innerHTML = jams.map(j =>
+          `<div class="jam-card">
+             <h4>${j.title}</h4>
+             <p><strong>Условия:</strong> ${j.conditions}</p>
+             <p><strong>Приз:</strong> ${j.reward || '—'}</p>
+             <p><strong>Участников:</strong> до ${j.participants}</p>
+             <p><strong>Контакт:</strong> ${j.contact}</p>
+           </div>`
+        ).join('');
+      } catch(err) {
+        console.error('Ошибка загрузки джемов:', err);
+      }
+    }
+
+    const modal = document.getElementById('jamModal');
+    document.getElementById('openFormBtn').onclick = () => modal.classList.add('show');
+    document.getElementById('closeFormBtn').onclick = () => modal.classList.remove('show');
+
+    document.getElementById('submitJamBtn').onclick = async () => {
+      const title = document.getElementById('jamTitle').value.trim();
+      const conditions = document.getElementById('jamConditions').value.trim();
+      const reward = document.getElementById('jamReward').value.trim();
+      const participants = document.getElementById('jamParticipants').value;
+      const contact = document.getElementById('jamContact').value.trim();
+      const msgDiv = document.getElementById('formMessage');
+      msgDiv.style.display = 'none';
+      if (!title || !conditions || !contact) {
+        msgDiv.textContent = 'Поля с * обязательны.';
+        msgDiv.style.color = 'red';
+        msgDiv.style.display = 'block';
+        return;
+      }
+      try {
+        const res = await fetch(`${API_URL}/api/jams/request`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, conditions, reward, participants, contact })
+        });
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        msgDiv.textContent = 'Заявка отправлена!';
+        msgDiv.style.color = 'green';
+        msgDiv.style.display = 'block';
+        setTimeout(() => modal.classList.remove('show'), 1500);
+      } catch(err) {
+        msgDiv.textContent = 'Ошибка отправки. Проверьте сеть.';
+        msgDiv.style.color = 'red';
+        msgDiv.style.display = 'block';
+        console.error('Ошибка отправки заявки:', err);
+      }
+    };
+
+    // Инициализация
+    loadJams();
+  </script>
+</body>
+</html>
