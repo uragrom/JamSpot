@@ -17,7 +17,7 @@ from aiogram.utils import executor
 
 # ЗАГРУЗКА
 load_dotenv()
-BOT_TOKEN = ('7474555208:AAHIyMB5-9MgFi_BWwHqAM6uDqAAdoTLOtI') or (sys.argv[1] if len(sys.argv)>1 else None)
+BOT_TOKEN = ('ВАШ бот токен') or (sys.argv[1] if len(sys.argv)>1 else None)
 ADMIN_ID  = ('1261986345')
 if not BOT_TOKEN or not ADMIN_ID:
     print("Error: provide BOT_TOKEN and ADMIN_ID")
