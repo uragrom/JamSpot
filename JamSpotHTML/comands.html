@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>JamSpot Team Dashboard (Offline)</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
   <style>
     body, html { margin:0; padding:0; font-family: Arial, sans-serif; background: #f5f5f5; height:100%; }
     .section { display: none; }
@@ -21,6 +22,7 @@
   <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
       <a class="navbar-brand" href="#">JamSpot</a>
+      <a class="navbar-brand" href="index.html">Главная</a>
     </div>
   </nav>
 
@@ -58,81 +60,109 @@
     </div>
   </div>
 
-  <script>
-    // Load teams data from JSON
-    let teamsData = [];
-    let currentTeam = null;
-    async function initTeams() {
-      try {
-        const res = await fetch('/teams.json');
-        teamsData = await res.json();
-      } catch (e) {
-        console.error('Error loading teams.json:', e);
-      }
-    }
-    initTeams();
+<script>
+    const socket = io('https://your-server.com'); // Ваш сервер
 
-    // Login function uses hash comparison
+    let currentTeam = null;
+    let userToken = '';
+
+    // Инициализация подключения
+    async function init() {
+      userToken = localStorage.getItem('jamspot_token') || generateUserToken();
+      localStorage.setItem('jamspot_token', userToken);
+      socket.emit('join', { userToken });
+    }
+
+    function generateUserToken() {
+      return Math.random().toString(36).substr(2, 9);
+    }
+
+    // Real-time listeners
+    socket.on('tasks_update', (tasks) => {
+      currentTeam.tasks = tasks;
+      displayTasks();
+    });
+
+    socket.on('projects_update', (projects) => {
+      currentTeam.projects = projects;
+      displayProjects();
+    });
+
+    socket.on('chat_message', (msg) => {
+      displayChatMessage(msg);
+    });
+
+    // Модифицированная функция логина
     async function login() {
       const name = document.getElementById('teamName').value.trim();
       const pass = document.getElementById('teamPassword').value;
-      const errDiv = document.getElementById('loginError'); errDiv.textContent = '';
-      if (!name || !pass) {
-        errDiv.textContent = 'Введите имя и пароль'; return;
+      
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, pass, userToken })
+        });
+        
+        const data = await response.json();
+        currentTeam = data.team;
+        
+        // Подключаемся к комнате команды
+        socket.emit('join_team', { 
+          teamId: currentTeam.id,
+          userToken
+        });
+        
+        // Обновляем интерфейс
+        document.getElementById('loginSection').classList.remove('visible');
+        document.getElementById('dashboardSection').classList.add('visible');
+        displayProjects();
+        displayTasks();
+        
+      } catch (error) {
+        console.error('Login error:', error);
       }
-      const team = teamsData.find(t => t.team_name.toLowerCase() === name.toLowerCase());
-      if (!team) {
-        errDiv.textContent = 'Команда не найдена'; return;
-      }
-
-      currentTeam = team;
-      document.getElementById('teamNameDisplay').textContent = team.team_name;
-      document.getElementById('loginSection').classList.remove('visible');
-      document.getElementById('dashboardSection').classList.add('visible');
-      displayProjects(); displayTasks();
     }
 
-    // Display projects from currentTeam.projects
-    function displayProjects() {
-      const list = document.getElementById('projectsList'); list.innerHTML = '';
-      if (!currentTeam) return;
-      currentTeam.projects.forEach(p => {
-        const div = document.createElement('div'); div.className = 'project-item';
-        div.innerHTML = `<strong>${p.name}</strong><br>Token: <code>${p.token}</code><br><button class="btn btn-sm btn-outline-primary mt-1">Download</button>`;
-        list.appendChild(div);
-      });
-    }
-
-    // Display tasks from currentTeam.tasks
-    function displayTasks() {
-      const list = document.getElementById('tasksList'); list.innerHTML = '';
-      if (!currentTeam) return;
-      currentTeam.tasks.forEach((task, idx) => {
-        const div = document.createElement('div');
-        div.className = 'task-item d-flex align-items-center ' + (task.done ? 'done' : '');
-        div.innerHTML = `
-          <input type="checkbox" class="form-check-input me-2" ${task.done ? 'checked' : ''} onchange="toggleTask(${idx})">
-          <span>${task.text}</span>
-        `;
-        list.appendChild(div);
-      });
-    }
-
-    // Add new task locally
-    function addTask() {
-      if (!currentTeam) return;
+    // Модифицированные функции для работы с задачами
+    async function addTask() {
       const input = document.getElementById('newTaskInput');
-      const text = input.value.trim(); if (!text) return;
-      currentTeam.tasks.push({ text, done: false }); input.value = '';
-      displayTasks();
+      const text = input.value.trim();
+      
+      if (text) {
+        socket.emit('add_task', {
+          teamId: currentTeam.id,
+          text,
+          userToken
+        });
+        input.value = '';
+      }
     }
 
-    // Toggle task completion
-    function toggleTask(idx) {
-      if (!currentTeam) return;
-      currentTeam.tasks[idx].done = !currentTeam.tasks[idx].done;
-      displayTasks();
+    async function toggleTask(idx) {
+      socket.emit('toggle_task', {
+        teamId: currentTeam.id,
+        taskIndex: idx,
+        userToken
+      });
     }
+
+    // Новая функция для чата
+    function sendMessage() {
+      const input = document.getElementById('chatInput');
+      const message = input.value.trim();
+      
+      if (message) {
+        socket.emit('chat_message', {
+          teamId: currentTeam.id,
+          message,
+          userToken
+        });
+        input.value = '';
+      }
+    }
+
+    init();
   </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>

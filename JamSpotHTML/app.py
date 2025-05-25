@@ -15,25 +15,25 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ContentType, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils import executor
 
-# ЗАГРУЗКА
+# Загрузка переменных окружения
 load_dotenv()
-BOT_TOKEN = ('ВАШ бот токен') or (sys.argv[1] if len(sys.argv)>1 else None)
-ADMIN_ID  = ('1261986345')
+BOT_TOKEN = ('7474555208:AAHIyMB5-9MgFi_BWwHqAM6uDqAAdoTLOtI') or (sys.argv[1] if len(sys.argv) > 1 else None)
+ADMIN_ID = ('1261986345')
 if not BOT_TOKEN or not ADMIN_ID:
     print("Error: provide BOT_TOKEN and ADMIN_ID")
     sys.exit(1)
 
-# Истинный путь
-BASE_DIR      = os.getcwd()
-UPLOAD_DIR    = os.path.join(BASE_DIR,'uploads')
-DB_PATH       = os.path.join(BASE_DIR,'jamspot.db')
-PROJECTS_JSON = os.path.join(BASE_DIR,'projects.json')
-TEAMS_JSON    = os.path.join(BASE_DIR,'teams.json')
-JAMS_JSON     = os.path.join(BASE_DIR,'jams.json')
+# Определение путей
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
+DB_PATH = os.path.join(BASE_DIR, 'jamspot.db')
+PROJECTS_JSON = os.path.join(BASE_DIR, 'projects.json')
+TEAMS_JSON = os.path.join(BASE_DIR, 'teams.json')
+JAMS_JSON = os.path.join(BASE_DIR, 'jams.json')
 
-os.makedirs(UPLOAD_DIR,exist_ok=True)
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Устоновка датабаз
+# Инициализация базы данных
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 cursor.executescript('''
@@ -74,53 +74,67 @@ CREATE TABLE IF NOT EXISTS jams(
 ''')
 conn.commit()
 
-# JSON регенирация
+# Функции генерации JSON
 def regenerate_projects_json():
-    cursor.execute("DELETE FROM games WHERE LENGTH(TRIM(name))<3")
-    bad = [(t,) for t,p,z in cursor.execute("SELECT token,photo_path,zip_path FROM games")
+    cursor.execute("DELETE FROM games WHERE LENGTH(TRIM(name)) < 3")
+    bad = [(t,) for t, p, z in cursor.execute("SELECT token, photo_path, zip_path FROM games") 
            if not (os.path.exists(p) and os.path.exists(z))]
     if bad:
         cursor.executemany("DELETE FROM games WHERE token=?", bad)
         conn.commit()
-    projects = [
-        {'token': t, 'name': n, 'owner_id': o,
-         'photo': os.path.relpath(p, BASE_DIR).replace('\\','/'),
-         'zip':   os.path.relpath(z, BASE_DIR).replace('\\','/')}
-        for t,n,o,p,z in cursor.execute(
-            "SELECT token,name,owner_id,photo_path,zip_path FROM games")
-    ]
+    
+    projects = []
+    for t, n, o, p, z in cursor.execute("SELECT token, name, owner_id, photo_path, zip_path FROM games"):
+        projects.append({
+            'token': t,
+            'name': n,
+            'owner_id': o,
+            'photo': os.path.relpath(p, BASE_DIR).replace('\\', '/'),
+            'zip': os.path.relpath(z, BASE_DIR).replace('\\', '/')
+        })
+    
     with open(PROJECTS_JSON, 'w', encoding='utf-8') as f:
         json.dump(projects, f, ensure_ascii=False, indent=2)
 
 def regenerate_teams_json():
     teams = []
-    for tn, o, pw in cursor.execute(
-        "SELECT team_name,owner_id,password_hash FROM teams"):
+    for tn, o, pw in cursor.execute("SELECT team_name, owner_id, password_hash FROM teams"):
         members = [r[0] for r in cursor.execute(
             "SELECT user_id FROM team_members WHERE team_name=?", (tn,))]
-        teams.append({'team_name': tn, 'owner_id': o, 'password_hash': pw, 'members': members})
+        teams.append({
+            'team_name': tn,
+            'owner_id': o,
+            'password_hash': pw,
+            'members': members
+        })
+    
     with open(TEAMS_JSON, 'w', encoding='utf-8') as f:
         json.dump(teams, f, ensure_ascii=False, indent=2)
 
 def regenerate_jams_json():
-    jams = [
-        {'id': i, 'title': t, 'conditions': c, 'reward': r, 'participants': pr, 'contact': ct}
-        for i,t,c,r,pr,ct in cursor.execute(
-            "SELECT id,title,conditions,reward,participants,contact FROM jams")
-    ]
+    jams = []
+    for row in cursor.execute("SELECT id, title, conditions, reward, participants, contact FROM jams"):
+        jams.append({
+            'id': row[0],
+            'title': row[1],
+            'conditions': row[2],
+            'reward': row[3],
+            'participants': row[4],
+            'contact': row[5]
+        })
+    
     with open(JAMS_JSON, 'w', encoding='utf-8') as f:
         json.dump(jams, f, ensure_ascii=False, indent=2)
 
-# Усоновить JSON регенирацию
 regenerate_projects_json()
 regenerate_teams_json()
 regenerate_jams_json()
 
-# Бот и диспетчер
+# Инициализация бота
 bot = Bot(token=BOT_TOKEN)
-dp  = Dispatcher(bot, storage=MemoryStorage())
+dp = Dispatcher(bot, storage=MemoryStorage())
 
-# FSM States
+# Состояния FSM
 class ProjectStates(StatesGroup):
     name = State()
     photo = State()
@@ -137,21 +151,21 @@ class JamStates(StatesGroup):
     participants = State()
     contact = State()
 
-# Вспомогательный текст
+# Текст помощи
 HELP_TEXT = (
-    "/register - зарегистрировать проект\n"
-    "/get <token> - скачать проект\n"
-    "/create_team - создать команду\n"
-    "/add_member <team> <@user> - добавить пользователя в команду\n"
-    "/my_team - список участников команды\n"
-    "/team_projects <team> - списое проектов команды\n"
-    "/delete_project <token> - удалить проект\n"
-    "/create_jam - зарегистрировать JAM\n"
-    "/refresh - перезагрузить JSON\n"
-    "/help - показать это сообщение снова"
+    "/register - Зарегистрировать проект\n"
+    "/get <token> - Скачать проект\n"
+    "/create_team - Создать команду\n"
+    "/add_member <team> <@user> - Добавить участника\n"
+    "/my_team - Мои команды\n"
+    "/team_projects <team> - Проекты команды\n"
+    "/delete_project <token> - Удалить проект\n"
+    "/create_jam - Создать джем\n"
+    "/refresh - Обновить JSON\n"
+    "/help - Помощь"
 )
 
-@dp.message_handler(commands=['start','help'])
+@dp.message_handler(commands=['start', 'help'])
 async def cmd_help(message: types.Message):
     await message.reply(HELP_TEXT)
 
@@ -160,68 +174,87 @@ async def cmd_refresh(message: types.Message):
     regenerate_projects_json()
     regenerate_teams_json()
     regenerate_jams_json()
-    await message.reply("All JSON files refreshed.")
+    await message.reply("JSON файлы обновлены")
 
-# Project registration handlers
+# Обработчики проектов
 @dp.message_handler(commands=['register'])
 async def reg1(message: types.Message):
-    await message.reply("Enter project name (min 3 chars):")
+    await message.reply("Введите название проекта (мин. 3 символа):")
     await ProjectStates.name.set()
 
 @dp.message_handler(state=ProjectStates.name, content_types=ContentType.TEXT)
 async def reg2(message: types.Message, state: FSMContext):
     name = message.text.strip()
     if len(name) < 3:
-        return await message.reply("Name too short.")
+        return await message.reply("Слишком короткое название")
     await state.update_data(name=name)
-    await message.reply("Send preview image:")
+    await message.reply("Отправьте превью-изображение:")
     await ProjectStates.photo.set()
 
 @dp.message_handler(state=ProjectStates.photo, content_types=ContentType.PHOTO)
 async def reg3(message: types.Message, state: FSMContext):
-    path = os.path.join(UPLOAD_DIR, f"temp_{uuid.uuid4().hex[:8]}.jpg")
-    await message.photo[-1].download(destination_file=path)
-    await state.update_data(photo=path)
-    await message.reply("Send ZIP archive:")
-    await ProjectStates.zipfile.set()
+    try:
+        photo_tmp = os.path.join(UPLOAD_DIR, f"temp_{uuid.uuid4().hex[:8]}.jpg")
+        await message.photo[-1].download(destination_file=photo_tmp)
+        await state.update_data(photo=photo_tmp)
+        await message.reply("Отправьте ZIP-архив:")
+        await ProjectStates.zipfile.set()
+    except Exception as e:
+        await message.reply(f"Ошибка загрузки фото: {str(e)}")
+        await state.finish()
 
 @dp.message_handler(state=ProjectStates.zipfile, content_types=ContentType.DOCUMENT)
 async def reg4(message: types.Message, state: FSMContext):
-    if not message.document.file_name.lower().endswith('.zip'):
-        return await message.reply("Error: must be a ZIP.")
-    data = await state.get_data()
-    name = data['name']
-    photo_tmp = data['photo']
-    token = uuid.uuid4().hex[:8]
-    slug = re.sub(r'[^a-z0-9]+', '_', name.lower())
-    proj_dir = os.path.join(UPLOAD_DIR, f"{slug}_{token}")
-    os.makedirs(proj_dir, exist_ok=True)
-    ext = os.path.splitext(photo_tmp)[1]
-    photo_path = os.path.join(proj_dir, f"{token}_preview{ext}")
-    os.replace(photo_tmp, photo_path)
-    zip_path = os.path.join(proj_dir, f"{token}.zip")
-    await message.document.download(destination_file=zip_path)
-    cursor.execute(
-        "INSERT INTO games(token,name,owner_id,photo_path,zip_path) VALUES(?,?,?,?,?)",
-        (token, name, message.from_user.id, photo_path, zip_path)
-    )
-    conn.commit()
-    regenerate_projects_json()
-    await message.reply(f"Project registered! Token: {token}")
-    await state.finish()
+    try:
+        if not message.document.file_name.lower().endswith('.zip'):
+            return await message.reply("Требуется ZIP-архив")
+
+        data = await state.get_data()
+        name = data['name']
+        photo_tmp = data['photo']
+        token = uuid.uuid4().hex[:8]
+        slug = re.sub(r'[^a-z0-9]+', '_', name.lower()).strip('_')
+        proj_dir = os.path.join(UPLOAD_DIR, f"{slug}_{token}")
+        
+        os.makedirs(proj_dir, exist_ok=True)
+
+        # Перемещение фото
+        ext = os.path.splitext(photo_tmp)[1]
+        photo_path = os.path.join(proj_dir, f"{token}_preview{ext}")
+        os.replace(photo_tmp, photo_path)
+
+        # Сохранение ZIP
+        zip_path = os.path.join(proj_dir, f"{token}.zip")
+        await message.document.download(destination_file=zip_path)
+
+        # Запись в БД
+        cursor.execute(
+            "INSERT INTO games(token, name, owner_id, photo_path, zip_path) VALUES(?,?,?,?,?)",
+            (token, name, message.from_user.id, photo_path, zip_path)
+        )
+        conn.commit()
+        regenerate_projects_json()
+        await message.reply(f"Проект зарегистрирован! Токен: {token}")
+        
+    except Exception as e:
+        await message.reply(f"Ошибка: {str(e)}")
+        if 'photo_tmp' in locals() and os.path.exists(photo_tmp):
+            os.remove(photo_tmp)
+    finally:
+        await state.finish()
 
 @dp.message_handler(commands=['get'])
 async def cmd_get(message: types.Message):
     token = message.get_args().strip()
     row = cursor.execute("SELECT zip_path FROM games WHERE token=?", (token,)).fetchone()
     if not row:
-        return await message.reply("Token not found.")
+        return await message.reply("Токен не найден")
     await message.reply_document(open(row[0], 'rb'))
 
-# Team creation handlers
+# Обработчики команд
 @dp.message_handler(commands=['create_team'])
 async def tm1(message: types.Message):
-    await message.reply("Enter team name:")
+    await message.reply("Введите название команды:")
     await TeamStates.name.set()
 
 @dp.message_handler(state=TeamStates.name, content_types=ContentType.TEXT)
@@ -229,174 +262,194 @@ async def tm2(message: types.Message, state: FSMContext):
     tn = message.text.strip()
     if cursor.execute("SELECT 1 FROM teams WHERE team_name=?", (tn,)).fetchone():
         await state.finish()
-        return await message.reply("Team already exists.")
+        return await message.reply("Команда уже существует")
     await state.update_data(name=tn)
-    await message.reply("Set password (min 6 chars):")
+    await message.reply("Установите пароль (мин. 6 символов):")
     await TeamStates.pwd.set()
 
 @dp.message_handler(state=TeamStates.pwd, content_types=ContentType.TEXT)
 async def tm3(message: types.Message, state: FSMContext):
     pw = message.text.strip()
     if len(pw) < 6:
-        return await message.reply("Password too short.")
+        return await message.reply("Слишком короткий пароль")
     data = await state.get_data()
     pwd_hash = hashlib.sha256(pw.encode()).hexdigest()
-    cursor.execute(
-        "INSERT INTO teams(team_name,owner_id,password_hash) VALUES(?,?,?)",
-        (data['name'], message.from_user.id, pwd_hash)
-    )
-    cursor.execute("INSERT INTO team_members(team_name,user_id) VALUES(?,?)",
-                   (data['name'], message.from_user.id))
-    conn.commit()
-    regenerate_teams_json()
-    await message.reply(f"Team '{data['name']}' created.")
-    await state.finish()
+    
+    try:
+        cursor.execute(
+            "INSERT INTO teams(team_name, owner_id, password_hash) VALUES(?,?,?)",
+            (data['name'], message.from_user.id, pwd_hash)
+        )
+        cursor.execute(
+            "INSERT INTO team_members(team_name, user_id) VALUES(?,?)",
+            (data['name'], message.from_user.id)
+        )
+        conn.commit()
+        regenerate_teams_json()
+        await message.reply(f"Команда '{data['name']}' создана")
+    except sqlite3.IntegrityError:
+        await message.reply("Ошибка: такая команда уже существует")
+    finally:
+        await state.finish()
 
 @dp.message_handler(commands=['add_member'])
 async def cmd_add_member(message: types.Message):
     parts = message.text.split()
     if len(parts) != 3:
-        return await message.reply("Usage: /add_member <team> <@user>")
+        return await message.reply("Использование: /add_member <команда> @юзер")
     tn, mention = parts[1], parts[2]
     owner = cursor.execute("SELECT owner_id FROM teams WHERE team_name=?", (tn,)).fetchone()
     if not owner or owner[0] != message.from_user.id:
-        return await message.reply("Only the owner can add members.")
-    uid = int(re.sub(r'\D','',mention))
-    cursor.execute("INSERT OR IGNORE INTO team_members(team_name,user_id) VALUES(?,?)", (tn, uid))
+        return await message.reply("Только владелец может добавлять участников")
+    uid = int(re.sub(r'\D', '', mention))
+    cursor.execute("INSERT OR IGNORE INTO team_members(team_name, user_id) VALUES(?,?)", (tn, uid))
     conn.commit()
     regenerate_teams_json()
-    await message.reply(f"{mention} added to '{tn}'.")
+    await message.reply(f"{mention} добавлен в '{tn}'")
 
 @dp.message_handler(commands=['my_team'])
 async def cmd_my_team(message: types.Message):
     uid = message.from_user.id
     rows = cursor.execute("SELECT team_name FROM team_members WHERE user_id=?", (uid,)).fetchall()
     if not rows:
-        return await message.reply("You are not in any team.")
-    await message.reply("Your teams: " + ", ".join(r[0] for r in rows))
+        return await message.reply("Вы не состоите в командах")
+    await message.reply("Ваши команды: " + ", ".join(r[0] for r in rows))
 
 @dp.message_handler(commands=['team_projects'])
 async def cmd_team_projects(message: types.Message):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        return await message.reply("Usage: /team_projects <team>")
+        return await message.reply("Использование: /team_projects <команда>")
     tn = parts[1].strip()
     uid = message.from_user.id
     if not cursor.execute("SELECT 1 FROM team_members WHERE team_name=? AND user_id=?", (tn, uid)).fetchone():
-        return await message.reply("You are not a member of this team.")
+        return await message.reply("Вы не состоите в этой команде")
     rows = cursor.execute(
-        "SELECT token,name FROM games WHERE owner_id IN (SELECT user_id FROM team_members WHERE team_name=?)", (tn,)
+        "SELECT token, name FROM games WHERE owner_id IN (SELECT user_id FROM team_members WHERE team_name=?)", (tn,)
     ).fetchall()
     if not rows:
-        return await message.reply("No projects in this team.")
-    await message.reply("Projects: " + ", ".join(f"{t}:{n}" for t,n in rows))
+        return await message.reply("Нет проектов в команде")
+    await message.reply("Проекты: " + ", ".join(f"{t}: {n}" for t, n in rows))
 
 @dp.message_handler(commands=['delete_project'])
 async def cmd_delete_project(message: types.Message):
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
-        return await message.reply("Usage: /delete_project <token>")
+        return await message.reply("Использование: /delete_project <токен>")
     tk = parts[1].strip()
-    row = cursor.execute("SELECT photo_path,zip_path,owner_id FROM games WHERE token=?", (tk,)).fetchone()
+    row = cursor.execute("SELECT photo_path, zip_path, owner_id FROM games WHERE token=?", (tk,)).fetchone()
     if not row:
-        return await message.reply("Project not found.")
+        return await message.reply("Проект не найден")
     if message.from_user.id != row[2]:
-        return await message.reply("Only the owner can delete this project.")
+        return await message.reply("Только владелец может удалить проект")
     try:
-        os.remove(row[0]); os.remove(row[1]); os.rmdir(os.path.dirname(row[0]))
-    except:
+        os.remove(row[0])
+        os.remove(row[1])
+        os.rmdir(os.path.dirname(row[0]))
+    except Exception as e:
         pass
     cursor.execute("DELETE FROM games WHERE token=?", (tk,))
     conn.commit()
     regenerate_projects_json()
-    await message.reply(f"Project {tk} deleted.")
+    await message.reply(f"Проект {tk} удалён")
 
-# Jam request handlers
+# Обработчики джемов
 @dp.message_handler(commands=['create_jam'])
 async def jam1(message: types.Message):
-    await message.reply("Enter jam title:")
+    await message.reply("Введите название джема:")
     await JamStates.title.set()
 
 @dp.message_handler(state=JamStates.title, content_types=ContentType.TEXT)
 async def jam2(message: types.Message, state: FSMContext):
     await state.update_data(title=message.text.strip())
-    await message.reply("Enter conditions:")
+    await message.reply("Введите условия:")
     await JamStates.conditions.set()
 
 @dp.message_handler(state=JamStates.conditions, content_types=ContentType.TEXT)
 async def jam3(message: types.Message, state: FSMContext):
     await state.update_data(conditions=message.text.strip())
-    await message.reply("Enter reward (optional):")
+    await message.reply("Введите награду (опционально):")
     await JamStates.reward.set()
 
 @dp.message_handler(state=JamStates.reward, content_types=ContentType.TEXT)
 async def jam4(message: types.Message, state: FSMContext):
     await state.update_data(reward=message.text.strip())
-    await message.reply("Enter max participants:")
+    await message.reply("Введите максимальное количество участников:")
     await JamStates.participants.set()
 
 @dp.message_handler(state=JamStates.participants, content_types=ContentType.TEXT)
 async def jam5(message: types.Message, state: FSMContext):
     if not message.text.isdigit():
-        return await message.reply("Please enter a number.")
+        return await message.reply("Введите число")
     await state.update_data(participants=int(message.text))
-    await message.reply("Enter contact info:")
+    await message.reply("Введите контактную информацию:")
     await JamStates.contact.set()
 
 @dp.message_handler(state=JamStates.contact, content_types=ContentType.TEXT)
 async def jam6(message: types.Message, state: FSMContext):
     data = await state.get_data()
     contact = message.text.strip()
-    cursor.execute(
-        "INSERT INTO jam_requests(title,conditions,reward,participants,contact,requester_id) VALUES(?,?,?,?,?,?)",
-        (data['title'], data['conditions'], data['reward'], data['participants'], contact, message.from_user.id)
-    )
-    req_id = cursor.lastrowid
-    conn.commit()
-    # Notify admin
-    text = (
-        f"Jam Request #{req_id}:\n"
-        f"Title: {data['title']}\n"
-        f"Conditions: {data['conditions']}\n"
-        f"Reward: {data['reward']}\n"
-        f"Participants: {data['participants']}\n"
-        f"Contact: {contact}\n"
-        f"From: @{message.from_user.username or message.from_user.id}"
-    )
-    kb = InlineKeyboardMarkup().add(
-        InlineKeyboardButton('✅ Approve', callback_data=f"approve_jam:{req_id}"),
-        InlineKeyboardButton('❌ Reject', callback_data=f"reject_jam:{req_id}")
-    )
-    await bot.send_message(ADMIN_ID, text, reply_markup=kb)
-    await message.reply("Your request has been sent for approval.")
-    await state.finish()
+    try:
+        cursor.execute(
+            "INSERT INTO jam_requests(title, conditions, reward, participants, contact, requester_id) VALUES(?,?,?,?,?,?)",
+            (data['title'], data['conditions'], data['reward'], data['participants'], contact, message.from_user.id)
+        )
+        req_id = cursor.lastrowid
+        conn.commit()
+        text = (
+            f"Запрос на джем #{req_id}:\n"
+            f"Название: {data['title']}\n"
+            f"Условия: {data['conditions']}\n"
+            f"Награда: {data['reward']}\n"
+            f"Участники: {data['participants']}\n"
+            f"Контакт: {contact}\n"
+            f"От: @{message.from_user.username or message.from_user.id}"
+        )
+        kb = InlineKeyboardMarkup().add(
+            InlineKeyboardButton('✅ Одобрить', callback_data=f"approve_jam:{req_id}"),
+            InlineKeyboardButton('❌ Отклонить', callback_data=f"reject_jam:{req_id}")
+        )
+        await bot.send_message(ADMIN_ID, text, reply_markup=kb)
+        await message.reply("Запрос отправлен на модерацию")
+    except Exception as e:
+        await message.reply(f"Ошибка: {str(e)}")
+    finally:
+        await state.finish()
 
-# Callbacks for jam approval/rejection
+# Колбэки для джемов
 @dp.callback_query_handler(lambda c: c.data.startswith('approve_jam:'))
 async def approve_jam(call: types.CallbackQuery):
-    _, rid = call.data.split(':',1)
-    row = cursor.execute(
-        "SELECT title,conditions,reward,participants,contact FROM jam_requests WHERE id=?", (rid,)
-    ).fetchone()
-    if row:
-        cursor.execute(
-            "INSERT INTO jams(title,conditions,reward,participants,contact) VALUES(?,?,?,?,?)", row
-        )
-        cursor.execute("DELETE FROM jam_requests WHERE id=?", (rid,))
-        conn.commit()
-        regenerate_jams_json()
-        await call.message.edit_text(call.message.text + "\n\n✅ Approved and published.")
+    _, rid = call.data.split(':', 1)
+    try:
+        row = cursor.execute(
+            "SELECT title, conditions, reward, participants, contact FROM jam_requests WHERE id=?", 
+            (rid,)
+        ).fetchone()
+        if row:
+            cursor.execute(
+                "INSERT INTO jams(title, conditions, reward, participants, contact) VALUES(?,?,?,?,?)", 
+                row
+            )
+            cursor.execute("DELETE FROM jam_requests WHERE id=?", (rid,))
+            conn.commit()
+            regenerate_jams_json()
+            await call.message.edit_text(call.message.text + "\n\n✅ Одобрено")
+    except Exception as e:
+        print(f"Error approving jam: {str(e)}")
     await call.answer()
 
 @dp.callback_query_handler(lambda c: c.data.startswith('reject_jam:'))
 async def reject_jam(call: types.CallbackQuery):
-    _, rid = call.data.split(':',1)
-    cursor.execute("DELETE FROM jam_requests WHERE id=?", (rid,))
-    conn.commit()
-    await call.message.edit_text(call.message.text + "\n\n❌ Rejected.")
+    _, rid = call.data.split(':', 1)
+    try:
+        cursor.execute("DELETE FROM jam_requests WHERE id=?", (rid,))
+        conn.commit()
+        await call.message.edit_text(call.message.text + "\n\n❌ Отклонено")
+    except Exception as e:
+        print(f"Error rejecting jam: {str(e)}")
     await call.answer()
 
-# Web server to serve JSON and static files
+# Веб-сервер
 app = web.Application()
 app.router.add_static('/', BASE_DIR)
 
