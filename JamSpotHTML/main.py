@@ -17,6 +17,8 @@ from aiogram.utils import executor
 
 #NOTE - функции в тг работают, а не сайте то работают то нет - это весьма загадочно... 
 
+АААА ЭТО ТЕСТ С ОШИБКАМИ ААААААА
+
 #! Загрузка переменных окружения
 load_dotenv()
 BOT_TOKEN = ('#ANCHOR - нужен тг токен') or (sys.argv[1] if len(sys.argv) > 1 else None)
