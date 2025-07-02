@@ -15,15 +15,17 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ContentType, InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils import executor
 
-# Загрузка переменных окружения
+#NOTE - функции в тг работают, а не сайте то работают то нет - это весьма загадочно... 
+
+#! Загрузка переменных окружения
 load_dotenv()
-BOT_TOKEN = ('7474555208:AAHIyMB5-9MgFi_BWwHqAM6uDqAAdoTLOtI') or (sys.argv[1] if len(sys.argv) > 1 else None)
-ADMIN_ID = ('1261986345')
+BOT_TOKEN = ('#ANCHOR - нужен тг токен') or (sys.argv[1] if len(sys.argv) > 1 else None)
+ADMIN_ID = ('#ANCHOR - нужен айди для админа')
 if not BOT_TOKEN or not ADMIN_ID:
     print("Error: provide BOT_TOKEN and ADMIN_ID")
     sys.exit(1)
 
-# Определение путей
+#! Определение путей
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_DIR = os.path.join(BASE_DIR, 'uploads')
 DB_PATH = os.path.join(BASE_DIR, 'jamspot.db')
@@ -33,7 +35,7 @@ JAMS_JSON = os.path.join(BASE_DIR, 'jams.json')
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Инициализация базы данных
+#! Инициализация базы данных
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
 cursor.executescript('''
@@ -74,7 +76,7 @@ CREATE TABLE IF NOT EXISTS jams(
 ''')
 conn.commit()
 
-# Функции генерации JSON
+#! Функции генерации JSON
 def regenerate_projects_json():
     cursor.execute("DELETE FROM games WHERE LENGTH(TRIM(name)) < 3")
     bad = [(t,) for t, p, z in cursor.execute("SELECT token, photo_path, zip_path FROM games") 
@@ -218,16 +220,16 @@ async def reg4(message: types.Message, state: FSMContext):
         
         os.makedirs(proj_dir, exist_ok=True)
 
-        # Перемещение фото
+        #! Перемещение фото
         ext = os.path.splitext(photo_tmp)[1]
         photo_path = os.path.join(proj_dir, f"{token}_preview{ext}")
         os.replace(photo_tmp, photo_path)
 
-        # Сохранение ZIP
+        #! Сохранение ZIP
         zip_path = os.path.join(proj_dir, f"{token}.zip")
         await message.document.download(destination_file=zip_path)
 
-        # Запись в БД
+        #! Запись в БД
         cursor.execute(
             "INSERT INTO games(token, name, owner_id, photo_path, zip_path) VALUES(?,?,?,?,?)",
             (token, name, message.from_user.id, photo_path, zip_path)
@@ -251,7 +253,7 @@ async def cmd_get(message: types.Message):
         return await message.reply("Токен не найден")
     await message.reply_document(open(row[0], 'rb'))
 
-# Обработчики команд
+#! Обработчики команд
 @dp.message_handler(commands=['create_team'])
 async def tm1(message: types.Message):
     await message.reply("Введите название команды:")
@@ -449,7 +451,7 @@ async def reject_jam(call: types.CallbackQuery):
         print(f"Error rejecting jam: {str(e)}")
     await call.answer()
 
-# Веб-сервер
+#! Веб-сервер
 app = web.Application()
 app.router.add_static('/', BASE_DIR)
 
